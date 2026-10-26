@@ -37,3 +37,21 @@ target_include_directories(neuralnet_tokenizer INTERFACE
 target_link_libraries(neuralnet_tokenizer INTERFACE
     neuralnet::base neuralnet::threadpool neuralnet::kvrecord neuralnet::dataset)
 target_compile_features(neuralnet_tokenizer INTERFACE cxx_std_23)
+
+# ── 测试（NN_BUILD_TESTS；顶层工程默认 ON，被 add_subdirectory 消费时默认 OFF）──
+# 独立开发/CI：cmake -B build && cmake --build build && ctest --test-dir build
+option(NN_BUILD_TESTS "Build tokenizer.neuralnet.cpp tests" ${PROJECT_IS_TOP_LEVEL})
+if(NN_BUILD_TESTS)
+    enable_testing()
+    if(MSVC)
+        add_compile_options(/W4 /permissive- /Zc:preprocessor /utf-8)
+    else()
+        add_compile_options(-fno-exceptions -Wall -Wextra -Wpedantic -Werror)
+    endif()
+
+    foreach(_t tokenizer nnvocab dataset_integration)
+        add_executable(tokenizer_${_t}_test tests/${_t}_test.cpp)
+        target_link_libraries(tokenizer_${_t}_test PRIVATE neuralnet::tokenizer)
+        add_test(NAME tokenizer_${_t}_test COMMAND tokenizer_${_t}_test)
+    endforeach()
+endif()
