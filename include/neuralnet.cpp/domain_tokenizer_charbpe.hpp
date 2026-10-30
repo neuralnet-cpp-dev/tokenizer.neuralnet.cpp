@@ -58,13 +58,13 @@ class CharBPETokenizer : public Tokenizer
 {
 public:
     // 特殊 token ID（固定布局）
-    static constexpr std::size_t PAD_ID          = 0;
-    static constexpr std::size_t UNK_ID          = 1;
-    static constexpr std::size_t BOS_ID          = 2;
-    static constexpr std::size_t EOS_ID          = 3;
-    static constexpr std::size_t BYTE_BASE       = 4;   // 256 单字节兜底起始 ID
-    static constexpr std::size_t CHAR_BASE       = 260; // 非 ASCII 字符 token 起始 ID
-    static constexpr std::size_t MIN_VOCAB_SIZE  = CHAR_BASE; // 最小词表大小
+    static constexpr std::size_t PAD_ID = 0;
+    static constexpr std::size_t UNK_ID = 1;
+    static constexpr std::size_t BOS_ID = 2;
+    static constexpr std::size_t EOS_ID = 3;
+    static constexpr std::size_t BYTE_BASE = 4;   // 256 单字节兜底起始 ID
+    static constexpr std::size_t CHAR_BASE = 260; // 非 ASCII 字符 token 起始 ID
+    static constexpr std::size_t MIN_VOCAB_SIZE = CHAR_BASE; // 最小词表大小
     static constexpr std::size_t DEFAULT_VOCAB_SIZE = 5000;
     static constexpr std::uint32_t DEFAULT_MIN_FREQ = 2;
 
@@ -75,11 +75,11 @@ public:
 
     struct Config
     {
-        std::size_t   vocab_size = DEFAULT_VOCAB_SIZE;
-        std::uint32_t min_freq   = DEFAULT_MIN_FREQ;
-        LogFn         log        = nullptr;
-        bool          show_progress = false;   // 训练时显示控制台进度条
-        std::uint32_t threads    = 0;   // 预分词并行: 0=自动(线程池全部核心), 1=顺序, >1=指定并行度
+        std::size_t vocab_size = DEFAULT_VOCAB_SIZE;
+        std::uint32_t min_freq = DEFAULT_MIN_FREQ;
+        LogFn log = nullptr;
+        bool show_progress = false;   // 训练时显示控制台进度条
+        std::uint32_t threads = 0;   // 预分词并行: 0=自动(线程池全部核心), 1=顺序, >1=指定并行度
     };
 
     CharBPETokenizer() = default;
@@ -90,10 +90,10 @@ public:
     // ── decode_vocab_entry_ 钩子：前 4 个特殊 token 纯文本，其余 hex ──
     // 基类 parse_vocab_json_ 在解析每个词表条目时回调此虚方法。
     // （旧 JSON 词表的条目编码；JSON 写出已废弃，词表落盘一律 .nnvocab）
-    [[nodiscard]] std::string decode_vocab_entry_(const std::string &raw, std::size_t tid) const override
+    [[nodiscard]] std::string decode_vocab_entry_(const std::string& raw,
+                                                  std::size_t tid) const override
     {
-        if (tid < 4)
-            return raw;
+        if (tid < 4) return raw;
         std::string tok;
         tok.reserve(raw.size() / 2);
         for (std::size_t i = 0; i + 1 < raw.size(); i += 2)
@@ -105,13 +105,11 @@ public:
         return tok;
     }
 
-    Result<void> train(const std::string &text) { return train(text, Config{}); }
+    Result<void> train(const std::string& text) { return train(text, Config{}); }
 
-    Result<void> train(const std::string &text, const Config &config)
+    Result<void> train(const std::string& text, const Config& config)
     {
-        auto log = config.log
-            ? config.log
-            : LogFn{[](std::string_view) { /* 静默 */ }};
+        auto log = config.log ? config.log : LogFn{[](std::string_view) { /* 静默 */ }};
 
         log("\n[CharBPE 训练] 预分词...");
         const bool show_p = config.show_progress;
@@ -122,8 +120,8 @@ public:
         std::unordered_map<std::string, std::size_t> word_freq;
         {
             auto worker = [&](std::size_t b, std::size_t e,
-                              std::unordered_map<std::string, std::size_t> &local,
-                              const std::function<void(std::size_t)> &progress)
+                              std::unordered_map<std::string, std::size_t>& local,
+                              const std::function<void(std::size_t)>& progress)
             {
                 std::size_t i = b;
                 std::size_t last_mb = static_cast<std::size_t>(-1);
@@ -144,7 +142,8 @@ public:
                     if (is_cjk(cp))
                     {
                         // CJK 字符：连续读取，遇到非 CJK 或 CJK 标点停止
-                        do {
+                        do
+                        {
                             word.append(text, i, len);
                             i += len;
                             if (i >= e) break;
@@ -153,7 +152,8 @@ public:
                     }
                     else if (is_alnum(cp))
                     {
-                        do {
+                        do
+                        {
                             word.append(text, i, len);
                             i += len;
                             if (i >= e) break;
@@ -166,8 +166,7 @@ public:
                         word.append(text, i, len);
                         i += len;
                     }
-                    if (!word.empty())
-                        ++local[std::move(word)];
+                    if (!word.empty()) ++local[std::move(word)];
 
                     const auto mb = i / (1u << 20);
                     if (mb != last_mb)
@@ -184,7 +183,8 @@ public:
         // ── 0. 校验最小词表大小（4 特殊 + 256 ASCII 兜底） ──────
         if (config.vocab_size < MIN_VOCAB_SIZE)
         {
-            NN_FAIL("CharBPE vocab_size too small: minimum is " +                 std::to_string(MIN_VOCAB_SIZE) +                 " (4 special + 256 ASCII fallback), got " +                 std::to_string(config.vocab_size));
+            NN_FAIL("CharBPE vocab_size too small: minimum is " + std::to_string(MIN_VOCAB_SIZE) +
+                    " (4 special + 256 ASCII fallback), got " + std::to_string(config.vocab_size));
         }
 
         // ── 1. 初始化词表：4 特殊 + 256 单字节 ASCII 兜底 ──────
@@ -214,7 +214,7 @@ public:
         {
             std::size_t cc_i = 0;
             std::size_t cc_last_pct = static_cast<std::size_t>(-1);
-            for (const auto &[chunk, _] : word_freq)
+            for (const auto& [chunk, _] : word_freq)
             {
                 std::size_t i = 0;
                 while (i < chunk.size())
@@ -240,10 +240,9 @@ public:
         // 按码点排序（UTF-8 字节序 = 码点序），依次分配 ID
         std::vector<std::string> sorted_chars(char_set.begin(), char_set.end());
         std::ranges::sort(sorted_chars);
-        for (const auto &ch : sorted_chars)
+        for (const auto& ch : sorted_chars)
         {
-            if (vocab_.size() >= config.vocab_size)
-                break; // 词表已满，后续字符回退 UNK
+            if (vocab_.size() >= config.vocab_size) break; // 词表已满，后续字符回退 UNK
             char_to_id_[ch] = vocab_.size();
             vocab_.push_back(ch);
         }
@@ -256,7 +255,7 @@ public:
         std::size_t total_chars = 0;
         std::size_t enc_i = 0;
         std::size_t enc_last_pct = static_cast<std::size_t>(-1);
-        for (const auto &[chunk, cnt] : word_freq)
+        for (const auto& [chunk, cnt] : word_freq)
         {
             std::vector<std::size_t> ids;
             ids.reserve(chunk.size());
@@ -270,8 +269,7 @@ public:
                 i += len;
             }
             total_chars += ids.size();
-            if (!ids.empty())
-                char_chunks.emplace_back(std::move(ids), cnt);
+            if (!ids.empty()) char_chunks.emplace_back(std::move(ids), cnt);
             if (show_p)
             {
                 ++enc_i;
@@ -284,20 +282,16 @@ public:
             }
         }
         word_freq.clear();
-        if (show_p)
-            finish_progress_("预分词");
+        if (show_p) finish_progress_("预分词");
         log("  总字符数: " + std::to_string(total_chars));
 
         // ── 3. BPE 合并训练 ──
         merges_.clear();
         // 注意：用条件判断避免无符号下溢（vocab_size 可能 < vocab_.size()）
-        if (config.vocab_size > vocab_.size())
-            merges_.reserve(config.vocab_size - vocab_.size());
+        if (config.vocab_size > vocab_.size()) merges_.reserve(config.vocab_size - vocab_.size());
 
         const std::size_t target_merges =
-            config.vocab_size > vocab_.size()
-                ? config.vocab_size - vocab_.size()
-                : 0;
+            config.vocab_size > vocab_.size() ? config.vocab_size - vocab_.size() : 0;
         log("  目标合并数: " + std::to_string(target_merges));
 
         // ── 共享 BPE 训练算法（基类 bpe_train_impl_） ──────────────
@@ -312,7 +306,7 @@ public:
     }
 
     // ── 预分词：按空白 + CJK 标点切分，每词按 UTF-8 字符 ──
-    [[nodiscard]] static std::vector<std::string> pre_tokenize(const std::string &text)
+    [[nodiscard]] static std::vector<std::string> pre_tokenize(const std::string& text)
     {
         std::vector<std::string> chunks;
         std::size_t i = 0;
@@ -333,7 +327,8 @@ public:
             if (is_cjk(cp))
             {
                 // CJK 字符：连续读取，遇到非 CJK 或 CJK 标点停止
-                do {
+                do
+                {
                     word.append(text, i, len);
                     i += len;
                     if (i >= text.size()) break;
@@ -342,7 +337,8 @@ public:
             }
             else if (is_alnum(cp))
             {
-                do {
+                do
+                {
                     word.append(text, i, len);
                     i += len;
                     if (i >= text.size()) break;
@@ -355,15 +351,14 @@ public:
                 word.append(text, i, len);
                 i += len;
             }
-            if (!word.empty())
-                chunks.push_back(std::move(word));
+            if (!word.empty()) chunks.push_back(std::move(word));
         }
         return chunks;
     }
 
     // ── UTF-8 解码：返回 (码点, 字节长度) ──
-    [[nodiscard]] static std::pair<uint32_t, std::size_t>
-    decode_utf8(const std::string &s, std::size_t pos)
+    [[nodiscard]] static std::pair<uint32_t, std::size_t> decode_utf8(const std::string& s,
+                                                                      std::size_t pos)
     {
         if (pos >= s.size()) return {0, 1};
         unsigned char b0 = static_cast<unsigned char>(s[pos]);
@@ -371,74 +366,65 @@ public:
         if (pos + 1 >= s.size()) return {0xFFFD, 1};
         if ((b0 & 0xE0) == 0xC0)
         {
-            uint32_t cp = ((b0 & 0x1F) << 6) |
-                          (static_cast<unsigned char>(s[pos+1]) & 0x3F);
+            uint32_t cp = ((b0 & 0x1F) << 6) | (static_cast<unsigned char>(s[pos + 1]) & 0x3F);
             return {cp, 2};
         }
         if (pos + 2 >= s.size()) return {0xFFFD, 1};
         if ((b0 & 0xF0) == 0xE0)
         {
             uint32_t cp = ((b0 & 0x0F) << 12) |
-                          ((static_cast<unsigned char>(s[pos+1]) & 0x3F) << 6) |
-                          (static_cast<unsigned char>(s[pos+2]) & 0x3F);
+                          ((static_cast<unsigned char>(s[pos + 1]) & 0x3F) << 6) |
+                          (static_cast<unsigned char>(s[pos + 2]) & 0x3F);
             return {cp, 3};
         }
         if (pos + 3 >= s.size()) return {0xFFFD, 1};
         if ((b0 & 0xF8) == 0xF0)
         {
             uint32_t cp = ((b0 & 0x07) << 18) |
-                          ((static_cast<unsigned char>(s[pos+1]) & 0x3F) << 12) |
-                          ((static_cast<unsigned char>(s[pos+2]) & 0x3F) << 6) |
-                          (static_cast<unsigned char>(s[pos+3]) & 0x3F);
+                          ((static_cast<unsigned char>(s[pos + 1]) & 0x3F) << 12) |
+                          ((static_cast<unsigned char>(s[pos + 2]) & 0x3F) << 6) |
+                          (static_cast<unsigned char>(s[pos + 3]) & 0x3F);
             return {cp, 4};
         }
         return {0xFFFD, 1};
     }
 
     [[nodiscard]] static constexpr bool is_space_byte(char c) noexcept
-    {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
-    }
+    { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; }
 
     // CJK 统一表意文字（常用汉字）
     [[nodiscard]] static constexpr bool is_cjk(uint32_t cp) noexcept
     {
         return (cp >= 0x4E00 && cp <= 0x9FFF)   // CJK 统一表意文字
-            || (cp >= 0x3400 && cp <= 0x4DBF)   // CJK 扩展 A
-            || (cp >= 0xF900 && cp <= 0xFAFF);  // CJK 兼容表意
+               || (cp >= 0x3400 && cp <= 0x4DBF)   // CJK 扩展 A
+               || (cp >= 0xF900 && cp <= 0xFAFF);  // CJK 兼容表意
     }
 
     // CJK 标点（作为分隔符，避免跨句合并）
     [[nodiscard]] static constexpr bool is_cjk_punct(uint32_t cp) noexcept
     {
         return (cp >= 0x3000 && cp <= 0x303F)   // CJK 标点和符号
-            || (cp >= 0xFF00 && cp <= 0xFFEF);  // 半角/全角形式
+               || (cp >= 0xFF00 && cp <= 0xFFEF);  // 半角/全角形式
     }
 
     [[nodiscard]] static constexpr bool is_alnum(uint32_t cp) noexcept
-    {
-        return (cp >= '0' && cp <= '9')
-            || (cp >= 'A' && cp <= 'Z')
-            || (cp >= 'a' && cp <= 'z');
-    }
+    { return (cp >= '0' && cp <= '9') || (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z'); }
 
     // ════════════════════════════════════════════════════════════════════
     // Tokenizer 接口实现
     // ════════════════════════════════════════════════════════════════════
 
-    [[nodiscard]] std::vector<std::size_t> encode(const std::string &text) const override
+    [[nodiscard]] std::vector<std::size_t> encode(const std::string& text) const override
     {
         // 保序并行：按安全切分点分段 → 段内顺序编码 → 按段序拼接
         // （结果为单线程逐字节一致；见基类 encode_segments_）。
-        return encode_segments_(text, [this](std::string_view seg, std::vector<std::size_t> &out)
-        {
-            encode_segment_(seg, out);
-        });
+        return encode_segments_(text, [this](std::string_view seg, std::vector<std::size_t>& out)
+                                { encode_segment_(seg, out); });
     }
 
 private:
     // ── 顺序编码一段文本：把 ids **追加**到 all_ids ──────────────────
-    void encode_segment_(std::string_view text, std::vector<std::size_t> &all_ids) const
+    void encode_segment_(std::string_view text, std::vector<std::size_t>& all_ids) const
     {
         std::size_t pos = 0;
         while (pos < text.size())
@@ -448,22 +434,29 @@ private:
             {
                 auto [mid, mlen] = try_match_marker(text, pos);
                 if (mid != Tokenizer::npos)
-                { all_ids.push_back(mid); pos += mlen; continue; }
+                {
+                    all_ids.push_back(mid);
+                    pos += mlen;
+                    continue;
+                }
             }
             // 收集普通文本直到下一个标记
             auto seg_start = pos;
             while (pos < text.size())
             {
                 if (has_dialogue_markers())
-                { auto [mid, mlen] = try_match_marker(text, pos); if (mid != Tokenizer::npos) break; }
+                {
+                    auto [mid, mlen] = try_match_marker(text, pos);
+                    if (mid != Tokenizer::npos) break;
+                }
                 ++pos;
             }
             std::string segment(text.substr(seg_start, pos - seg_start));
             // 正常 CharBPE 编码
             auto chunks = pre_tokenize(segment);
             // 每 chunk 复用 thread_local 输入缓冲 → 合并全程零堆分配
-            auto &ids = bpe_merge_scratch_().ids;
-            for (const auto &chunk : chunks)
+            auto& ids = bpe_merge_scratch_().ids;
+            for (const auto& chunk : chunks)
             {
                 ids.clear();
                 ids.reserve(chunk.size());
@@ -492,7 +485,6 @@ private:
     }
 
 public:
-
     [[nodiscard]] std::string decode(std::span<const std::size_t> ids) const override
     {
         std::string result;
@@ -500,14 +492,13 @@ public:
         {
             // BYTE_BASE(4) 及以上均为有效 token（含 ASCII 兜底 + 字符 + 合并）
             // 特殊 token (0-3) 解码为空
-            if (id < vocab_.size() && id >= BYTE_BASE)
-                result += vocab_[id];
+            if (id < vocab_.size() && id >= BYTE_BASE) result += vocab_[id];
         }
         return result;
     }
 
     [[nodiscard]] std::size_t vocab_size() const noexcept override { return vocab_.size(); }
-    [[nodiscard]] const std::vector<std::string> &vocab() const noexcept override { return vocab_; }
+    [[nodiscard]] const std::vector<std::string>& vocab() const noexcept override { return vocab_; }
 
     [[nodiscard]] std::size_t merge_count() const noexcept { return merges_.size(); }
 
@@ -521,13 +512,12 @@ protected:
         vocab_ = std::move(vocab);
         char_to_id_.clear();
         for (std::size_t id = BYTE_BASE; id < vocab_.size(); ++id)
-            if (!vocab_[id].empty())
-                char_to_id_[vocab_[id]] = id;
+            if (!vocab_[id].empty()) char_to_id_[vocab_[id]] = id;
     }
 
 public:
     // ── 旧 JSON 词表读取（模型 v5 内嵌词表 / dataset_convert vocab 用）──
-    [[nodiscard]] Result<void> load_from_string(const std::string &content) override
+    [[nodiscard]] Result<void> load_from_string(const std::string& content) override
     {
         vocab_.clear();
         merges_.clear();
@@ -543,8 +533,7 @@ public:
 
         // 重建 char_to_id_（BYTE_BASE 及以上均为字符 token）
         for (std::size_t id = BYTE_BASE; id < vocab_.size(); ++id)
-            if (!vocab_[id].empty())
-                char_to_id_[vocab_[id]] = id;
+            if (!vocab_[id].empty()) char_to_id_[vocab_[id]] = id;
 
         // 解析 merges 数组
         auto mp = content.find("\"merges\"");
@@ -560,8 +549,8 @@ public:
                     if (lb == std::string::npos) break;
                     auto rb = content.find(']', lb);
                     if (rb == std::string::npos) break;
-                    std::size_t a=0, b=0, n=0;
-                    auto s1 = content.substr(lb+1, rb-lb-1);
+                    std::size_t a = 0, b = 0, n = 0;
+                    auto s1 = content.substr(lb + 1, rb - lb - 1);
                     std::istringstream iss(s1);
                     char sep;
                     iss >> a >> sep >> b >> sep >> n;
@@ -591,7 +580,7 @@ private:
 //  旧 JSON 用 "bpe_tokenizer" | "char_bpe_tokenizer"（模型 v5 内嵌词表）。
 //  训练/推理入口统一使用此工厂，无需手动判断类型。
 
-[[nodiscard]] inline std::string peek_tokenizer_type(const std::string &json_content)
+[[nodiscard]] inline std::string peek_tokenizer_type(const std::string& json_content)
 {
     // 查找 "type" 字段值
     auto p = json_content.find("\"type\"");
@@ -599,7 +588,8 @@ private:
     auto c = json_content.find(':', p);
     if (c == std::string::npos) return {};
     ++c;
-    while (c < json_content.size() && json_content[c] == ' ') ++c;
+    while (c < json_content.size() && json_content[c] == ' ')
+        ++c;
     if (c >= json_content.size() || json_content[c] != '"') return {};
     ++c;
     std::string val;
@@ -608,10 +598,9 @@ private:
     return val;
 }
 
-[[nodiscard]] inline std::unique_ptr<Tokenizer> make_tokenizer(const std::string &type_str)
+[[nodiscard]] inline std::unique_ptr<Tokenizer> make_tokenizer(const std::string& type_str)
 {
-    if (type_str == "bpe_tokenizer" || type_str == "bpe")
-        return std::make_unique<BPETokenizer>();
+    if (type_str == "bpe_tokenizer" || type_str == "bpe") return std::make_unique<BPETokenizer>();
     if (type_str == "char_bpe_tokenizer" || type_str == "char_bpe")
         return std::make_unique<CharBPETokenizer>();
     return nullptr;
@@ -621,30 +610,25 @@ private:
 // ⚠ JSON 词表**不直读**（裁决 #7）：仅模型 v5 内嵌词表与
 //   `dataset_convert vocab` 迁移旧词表时调用本函数。
 [[nodiscard]] inline std::unique_ptr<Tokenizer>
-load_tokenizer_from_string(const std::string &json_content)
+load_tokenizer_from_string(const std::string& json_content)
 {
     auto type_str = peek_tokenizer_type(json_content);
-    if (type_str.empty())
-        return nullptr;  // 无法识别类型
+    if (type_str.empty()) return nullptr;  // 无法识别类型
     auto tok = make_tokenizer(type_str);
-    if (!tok)
-        return nullptr;
+    if (!tok) return nullptr;
     auto r = tok->load_from_string(json_content);
-    if (!r)
-        return nullptr;
+    if (!r) return nullptr;
     return tok;
 }
 
 // 从词表 kvrec（无文件标签）创建已加载的 tokenizer
 [[nodiscard]] inline Result<std::unique_ptr<Tokenizer>>
-load_tokenizer_from_kvrec(const KeyValueRecord &rec)
+load_tokenizer_from_kvrec(const KeyValueRecord& rec)
 {
     std::string type_str;
-    if (!rec.get("type", type_str))
-        NN_FAIL("词表 kvrec 缺少 type 字段");
+    if (!rec.get("type", type_str)) NN_FAIL("词表 kvrec 缺少 type 字段");
     auto tok = make_tokenizer(type_str);
-    if (!tok)
-        NN_FAIL("未知分词器类型: " + type_str);
+    if (!tok) NN_FAIL("未知分词器类型: " + type_str);
     NN_TRY_CHECK(tok->load_from_kvrec(rec));
     return tok;
 }
@@ -653,7 +637,7 @@ load_tokenizer_from_kvrec(const KeyValueRecord &rec)
 // .nnvocab 字节（[label "NNVC"][词表 kvrec v2]）或旧 JSON 字符串，按内容嗅探。
 // 模型内嵌词表（v5 JSON / v6 kvrec）经此加载。
 [[nodiscard]] inline Result<std::unique_ptr<Tokenizer>>
-load_tokenizer_from_bytes(const std::string &content)
+load_tokenizer_from_bytes(const std::string& content)
 {
     if (content.size() >= 4 && content.compare(0, 4, NNVOCAB_MAGIC, 4) == 0)
     {
@@ -663,8 +647,7 @@ load_tokenizer_from_bytes(const std::string &content)
     if (!content.empty() && content[0] == '{')
     {
         auto tok = load_tokenizer_from_string(content);
-        if (!tok)
-            NN_FAIL("无法识别分词器类型（旧 JSON 词表）");
+        if (!tok) NN_FAIL("无法识别分词器类型（旧 JSON 词表）");
         return tok;
     }
     NN_FAIL("无法识别的词表数据（既不是 .nnvocab 也不是 JSON 词表）");
@@ -675,34 +658,30 @@ load_tokenizer_from_bytes(const std::string &content)
 //（版本常量在 model_serialization.hpp 的 MODEL_VERSION；此处按字面 6 分派，
 //  避免分词器域反向依赖模型序列化头。）
 [[nodiscard]] inline Result<std::unique_ptr<Tokenizer>>
-load_tokenizer_from_model_blob(const std::string &content, std::uint32_t model_version)
+load_tokenizer_from_model_blob(const std::string& content, std::uint32_t model_version)
 {
-    if (content.empty())
-        NN_FAIL("模型未嵌入词表数据");
+    if (content.empty()) NN_FAIL("模型未嵌入词表数据");
     if (model_version >= 6)
     {
         NN_TRY(rec, parse_nnvocab(content));
         return load_tokenizer_from_kvrec(*rec);
     }
     auto tok = load_tokenizer_from_string(content);
-    if (!tok)
-        NN_FAIL("无法识别分词器类型（模型内嵌 JSON 词表）");
+    if (!tok) NN_FAIL("无法识别分词器类型（模型内嵌 JSON 词表）");
     return tok;
 }
 
 // 从 .nnvocab 词表文件创建已加载的 tokenizer。
 // 旧 JSON 词表不直读：报错并提示 `dataset_convert vocab`（裁决 #7）。
 [[nodiscard]] inline Result<std::unique_ptr<Tokenizer>>
-load_tokenizer_from_file(const std::string &path)
+load_tokenizer_from_file(const std::string& path)
 {
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) NN_FAIL("Cannot read: " + path);
-    std::string content((std::istreambuf_iterator<char>(ifs)),
-                        std::istreambuf_iterator<char>());
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     NN_TRY(rec, parse_nnvocab(content));
     return load_tokenizer_from_kvrec(*rec);
 }
 
 
 } // namespace nn
-

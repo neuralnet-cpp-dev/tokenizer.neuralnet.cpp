@@ -23,22 +23,21 @@ namespace
 
 int g_failures = 0;
 
-void expect(bool ok, const std::string &name)
+void expect(bool ok, const std::string& name)
 {
     if (!ok)
     {
         ++g_failures;
         std::printf("  [FAIL] %s\n", name.c_str());
     }
-    else
-        std::printf("  [ ok ] %s\n", name.c_str());
+    else std::printf("  [ ok ] %s\n", name.c_str());
 }
 
 using MergeList = std::vector<std::array<std::size_t, 3>>;
 
-std::string hex_encode(const std::string &raw)
+std::string hex_encode(const std::string& raw)
 {
-    static const char *digits = "0123456789abcdef";
+    static const char* digits = "0123456789abcdef";
     std::string out;
     for (unsigned char b : raw)
     {
@@ -49,8 +48,7 @@ std::string hex_encode(const std::string &raw)
 }
 
 // 旧 save_vocab_json_ 同形的 JSON 词表（bpe：全条目 hex）
-std::string make_bpe_json(const std::vector<std::string> &vocab,
-                          const MergeList &merges)
+std::string make_bpe_json(const std::vector<std::string>& vocab, const MergeList& merges)
 {
     std::ostringstream oss;
     oss << "{\n  \"type\": \"bpe_tokenizer\",\n  \"vocab\": {\n";
@@ -66,16 +64,14 @@ std::string make_bpe_json(const std::vector<std::string> &vocab,
     for (std::size_t i = 0; i < merges.size(); ++i)
     {
         if (i > 0) oss << ",";
-        oss << "\n    [" << merges[i][0] << ", " << merges[i][1]
-            << ", " << merges[i][2] << "]";
+        oss << "\n    [" << merges[i][0] << ", " << merges[i][1] << ", " << merges[i][2] << "]";
     }
     oss << "\n  ]\n}\n";
     return oss.str();
 }
 
 // 旧 save_vocab_json_ 同形的 JSON 词表（char_bpe：前 4 个特殊 token 纯文本，其余 hex）
-std::string make_charbpe_json(const std::vector<std::string> &vocab,
-                              const MergeList &merges)
+std::string make_charbpe_json(const std::vector<std::string>& vocab, const MergeList& merges)
 {
     std::ostringstream oss;
     oss << "{\n  \"type\": \"char_bpe_tokenizer\",\n  \"vocab\": {\n";
@@ -85,15 +81,13 @@ std::string make_charbpe_json(const std::vector<std::string> &vocab,
         if (vocab[id].empty()) continue;
         if (!first) oss << ",\n";
         first = false;
-        oss << "    \"" << id << "\": \""
-            << (id < 4 ? vocab[id] : hex_encode(vocab[id])) << "\"";
+        oss << "    \"" << id << "\": \"" << (id < 4 ? vocab[id] : hex_encode(vocab[id])) << "\"";
     }
     oss << "\n  },\n  \"vocab_size\": " << vocab.size() << ",\n  \"merges\": [";
     for (std::size_t i = 0; i < merges.size(); ++i)
     {
         if (i > 0) oss << ",";
-        oss << "\n    [" << merges[i][0] << ", " << merges[i][1]
-            << ", " << merges[i][2] << "]";
+        oss << "\n    [" << merges[i][0] << ", " << merges[i][1] << ", " << merges[i][2] << "]";
     }
     oss << "\n  ]\n}\n";
     return oss.str();
@@ -137,8 +131,7 @@ std::vector<std::string> charbpe_fixture_vocab()
 }
 
 // 两实例语义一致：词表逐项 + merges + 对话标记 + 编解码
-void expect_same_semantics(const nn::Tokenizer &a, const nn::Tokenizer &b,
-                           const std::string &name)
+void expect_same_semantics(const nn::Tokenizer& a, const nn::Tokenizer& b, const std::string& name)
 {
     expect(a.vocab() == b.vocab(), name + ": vocab 逐项一致");
     auto ka = a.to_kvrec();
@@ -148,26 +141,25 @@ void expect_same_semantics(const nn::Tokenizer &a, const nn::Tokenizer &b,
     (void)kb.get("merges", mb);
     expect(ma == mb, name + ": merges 三元组一致");
 
-    expect(a.system_marker_id() == b.system_marker_id()
-        && a.end_system_marker_id() == b.end_system_marker_id()
-        && a.user_marker_id() == b.user_marker_id()
-        && a.end_user_marker_id() == b.end_user_marker_id()
-        && a.assistant_marker_id() == b.assistant_marker_id()
-        && a.end_assistant_marker_id() == b.end_assistant_marker_id()
-        && a.start_think_marker_id() == b.start_think_marker_id()
-        && a.end_think_marker_id() == b.end_think_marker_id(),
-        name + ": 对话标记 ID 一致");
+    expect(a.system_marker_id() == b.system_marker_id() &&
+               a.end_system_marker_id() == b.end_system_marker_id() &&
+               a.user_marker_id() == b.user_marker_id() &&
+               a.end_user_marker_id() == b.end_user_marker_id() &&
+               a.assistant_marker_id() == b.assistant_marker_id() &&
+               a.end_assistant_marker_id() == b.end_assistant_marker_id() &&
+               a.start_think_marker_id() == b.start_think_marker_id() &&
+               a.end_think_marker_id() == b.end_think_marker_id(),
+           name + ": 对话标记 ID 一致");
 
     // 编解码语义一致（含对话标记与普通文本）
-    const std::string sample =
-        "<|user|>he<|end_of_user|><|assistant|>hel<|end_of_assistant|>";
+    const std::string sample = "<|user|>he<|end_of_user|><|assistant|>hel<|end_of_assistant|>";
     const auto ia = a.encode(sample);
     const auto ib = b.encode(sample);
     expect(ia == ib, name + ": encode 一致");
     expect(a.decode(ia) == b.decode(ib), name + ": decode 一致");
 }
 
-void write_file(const std::string &path, const std::string &content)
+void write_file(const std::string& path, const std::string& content)
 {
     std::ofstream ofs(path, std::ios::binary);
     ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
@@ -211,10 +203,9 @@ void test_json_to_nnvocab_roundtrip()
 void test_trained_roundtrip()
 {
     std::printf("训练态 save/load 往返:\n");
-    const std::string corpus =
-        "hello world, hello neural net. the quick brown fox.\n"
-        "人工神经网络很有趣。深度学习训练中。\n"
-        "<|user|>hi<|end_of_user|><|assistant|>hello<|end_of_assistant|>\n";
+    const std::string corpus = "hello world, hello neural net. the quick brown fox.\n"
+                               "人工神经网络很有趣。深度学习训练中。\n"
+                               "<|user|>hi<|end_of_user|><|assistant|>hello<|end_of_assistant|>\n";
 
     {
         nn::BPETokenizer tok;
@@ -262,9 +253,8 @@ void test_old_json_rejected()
     expect(!r, "旧 .json 词表被拒绝");
     if (!r)
     {
-        const std::string &msg = r.error().message;
-        expect(msg.find("dataset_convert") != std::string::npos,
-               "错误信息指路 dataset_convert");
+        const std::string& msg = r.error().message;
+        expect(msg.find("dataset_convert") != std::string::npos, "错误信息指路 dataset_convert");
         std::printf("         （错误信息: %s）\n", msg.c_str());
     }
 }
@@ -286,8 +276,7 @@ void test_load_from_bytes()
     const std::string file = nn::write_nnvocab(b->to_kvrec());
     auto c = nn::load_tokenizer_from_bytes(file);
     expect(static_cast<bool>(c), ".nnvocab 字节直载（模型 v6 内嵌）");
-    if (a && c)
-        expect_same_semantics(**a, **c, "字节直载");
+    if (a && c) expect_same_semantics(**a, **c, "字节直载");
 }
 
 }  // namespace
@@ -301,10 +290,9 @@ int main()
     test_load_from_bytes();
 
     std::error_code ec;
-    for (const char *p : {"nnvocab_test_bpe.nnvocab", "nnvocab_test_charbpe.nnvocab",
+    for (const char* p : {"nnvocab_test_bpe.nnvocab", "nnvocab_test_charbpe.nnvocab",
                           "nnvocab_test_trained_bpe.nnvocab",
-                          "nnvocab_test_trained_charbpe.nnvocab",
-                          "nnvocab_test_old.json"})
+                          "nnvocab_test_trained_charbpe.nnvocab", "nnvocab_test_old.json"})
         std::filesystem::remove(p, ec);
 
     std::printf("\nnnvocab_test: %d failure(s)\n", g_failures);

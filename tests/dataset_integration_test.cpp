@@ -29,20 +29,21 @@ int g_fail = 0;
 
 #include "test_common.hpp"
 
-namespace {
+namespace
+{
 
 // ── 原 text_train mark_assistant_spans（全局扫描 + doc 边界重置）────────
-std::vector<unsigned char> ref_mark_assistant_spans(
-    const std::vector<std::size_t> &flow, const std::vector<std::size_t> &doc_ids,
-    std::size_t asst_begin, std::size_t asst_end, std::size_t &asst_count)
+std::vector<unsigned char> ref_mark_assistant_spans(const std::vector<std::size_t>& flow,
+                                                    const std::vector<std::size_t>& doc_ids,
+                                                    std::size_t asst_begin, std::size_t asst_end,
+                                                    std::size_t& asst_count)
 {
     std::vector<unsigned char> mask(flow.size(), 0);
     bool in_asst = false;
     asst_count = 0;
     for (std::size_t i = 0; i < flow.size(); ++i)
     {
-        if (!doc_ids.empty() && i > 0 && doc_ids[i] != doc_ids[i - 1])
-            in_asst = false;
+        if (!doc_ids.empty() && i > 0 && doc_ids[i] != doc_ids[i - 1]) in_asst = false;
         const std::size_t id = flow[i];
         if (id == asst_begin) in_asst = true;
         mask[i] = in_asst ? 1u : 0u;
@@ -52,17 +53,16 @@ std::vector<unsigned char> ref_mark_assistant_spans(
     return mask;
 }
 
-void write_file(const std::string &path, const std::string &content)
+void write_file(const std::string& path, const std::string& content)
 {
     std::ofstream ofs(path, std::ios::binary);
     ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
 }
 
-std::string read_file(const std::string &path)
+std::string read_file(const std::string& path)
 {
     std::ifstream ifs(path, std::ios::binary);
-    return std::string((std::istreambuf_iterator<char>(ifs)),
-                        std::istreambuf_iterator<char>());
+    return std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 }
 
 // 对话语料：含 <|user|>/<|assistant|> 标记与中英文混合行
@@ -71,7 +71,8 @@ const std::string kCorpus =
     "   padded line with spaces   \n"
     "\n"
     "\t tab padded \t\r\n"
-    "<|user|>what is machine learning<|end_of_user|><|assistant|>it is a field of study<|end_of_assistant|>\n"
+    "<|user|>what is machine learning<|end_of_user|><|assistant|>it is a field of "
+    "study<|end_of_assistant|>\n"
     "<|user|>hello there<|end_of_user|><|assistant|>hi friend<|end_of_assistant|>\n"
     "人工神经网络深度学习训练中。\n"
     "<|user|>unclosed assistant doc<|end_of_user|><|assistant|>tail without end marker\n"
@@ -89,7 +90,7 @@ int main()
     auto docs_r = nn::read_text_docs(corpus_path);
     CHECK(docs_r.has_value(), "read_text_docs 成功");
     if (!docs_r) return 1;
-    const std::vector<std::string> &docs = *docs_r;
+    const std::vector<std::string>& docs = *docs_r;
     CHECK(docs.size() == 8, "doc 数正确（空行被跳过）");
 
     // ── BPE 训练（真实分词器）────────────────────────────────────
@@ -122,22 +123,20 @@ int main()
     std::vector<unsigned char> ref_mask_flat;
     {
         std::size_t asst_count = 0;
-        ref_mask_flat = ref_mark_assistant_spans(ref_flow, ref_doc_ids,
-            tok.assistant_marker_id(), tok.end_assistant_marker_id(), asst_count);
+        ref_mask_flat = ref_mark_assistant_spans(ref_flow, ref_doc_ids, tok.assistant_marker_id(),
+                                                 tok.end_assistant_marker_id(), asst_count);
         CHECK(asst_count > 0, "参考掩码含 assistant 目标");
     }
     std::vector<unsigned char> per_doc_mask_flat;
     std::vector<std::vector<unsigned char>> per_doc_masks;
-    for (const auto &toks : per_doc)
+    for (const auto& toks : per_doc)
     {
-        per_doc_masks.push_back(nn::mark_assistant_span(
-            toks, tok.assistant_marker_id(), tok.end_assistant_marker_id()));
-        per_doc_mask_flat.insert(per_doc_mask_flat.end(),
-                                 per_doc_masks.back().begin(),
+        per_doc_masks.push_back(nn::mark_assistant_span(toks, tok.assistant_marker_id(),
+                                                        tok.end_assistant_marker_id()));
+        per_doc_mask_flat.insert(per_doc_mask_flat.end(), per_doc_masks.back().begin(),
                                  per_doc_masks.back().end());
     }
-    CHECK(per_doc_mask_flat == ref_mask_flat,
-          "逐 doc 掩码与全局 mark_assistant_spans 逐位一致");
+    CHECK(per_doc_mask_flat == ref_mask_flat, "逐 doc 掩码与全局 mark_assistant_spans 逐位一致");
 
     // ── 3/4. 写 .nndataset → Dataset 读回逐位一致 ──────────────
     for (int mode = 0; mode < 2; ++mode)
@@ -153,13 +152,11 @@ int main()
         build.tool = "dataset_gen v1";
         build.created = 12345;
         build.train_docs = per_doc;
-        build.train_docs.insert(build.train_docs.begin() + 3,
-                                std::vector<std::size_t>{});
+        build.train_docs.insert(build.train_docs.begin() + 3, std::vector<std::size_t>{});
         if (assistant)
         {
             build.train_masks = per_doc_masks;
-            build.train_masks.insert(build.train_masks.begin() + 3,
-                                     std::vector<unsigned char>{});
+            build.train_masks.insert(build.train_masks.begin() + 3, std::vector<unsigned char>{});
         }
         std::vector<std::size_t> exp_flow, exp_ids;
         std::vector<unsigned char> exp_mask;
@@ -173,8 +170,7 @@ int main()
             if (assistant)
                 exp_mask.insert(exp_mask.end(), build.train_masks[i].begin(),
                                 build.train_masks[i].end());
-            else
-                exp_mask.insert(exp_mask.end(), build.train_docs[i].size(), 1u);
+            else exp_mask.insert(exp_mask.end(), build.train_docs[i].size(), 1u);
         }
         for (std::size_t i = 0; i < 3; ++i)
         {
@@ -188,17 +184,15 @@ int main()
             auto wr = nn::write_nndataset(oss, build);
             CHECK(wr.has_value(), (tag + ": write_nndataset 成功").c_str());
             if (!wr) continue;
-            write_file(path, nn::write_file_label(nn::NNDATASET_MAGIC,
-                                                  nn::NNDATASET_FILE_VERSION)
-                                 + oss.str());
+            write_file(path, nn::write_file_label(nn::NNDATASET_MAGIC, nn::NNDATASET_FILE_VERSION) +
+                                 oss.str());
         }
 
         auto ds_r = nn::Dataset::open(path);
         CHECK(ds_r.has_value(), (tag + ": Dataset::open 成功").c_str());
         if (!ds_r) continue;
-        const nn::Dataset &ds = *ds_r;
-        CHECK(ds.info().loss_scope == build.loss_scope,
-              (tag + ": loss_scope 一致").c_str());
+        const nn::Dataset& ds = *ds_r;
+        CHECK(ds.info().loss_scope == build.loss_scope, (tag + ": loss_scope 一致").c_str());
 
         // 词表 kvrec 往返稳定（模型内嵌词表字节来源）
         CHECK(nn::write_nnvocab(ds.vocab_kvrec()) == nn::write_nnvocab(build.vocab_kvrec),
@@ -211,8 +205,7 @@ int main()
         CHECK(corpus_rr->doc_ids == exp_ids,
               (tag + ": doc_ids 逐位一致（空 doc 不丢行号）").c_str());
         CHECK(corpus_rr->loss_mask == exp_mask,
-              (tag + (assistant ? ": loss_mask 逐位一致"
-                                : ": loss_scope=all 合成全 1 掩码"))
+              (tag + (assistant ? ": loss_mask 逐位一致" : ": loss_scope=all 合成全 1 掩码"))
                   .c_str());
 
         auto test_rr = ds.load_text(nn::DatasetSubset::Test);
@@ -229,13 +222,11 @@ int main()
                     t_ids.push_back(i + 1);
                 }
                 if (assistant)
-                    t_mask.insert(t_mask.end(), per_doc_masks[i].begin(),
-                                  per_doc_masks[i].end());
-                else
-                    t_mask.insert(t_mask.end(), per_doc[i].size(), 1u);
+                    t_mask.insert(t_mask.end(), per_doc_masks[i].begin(), per_doc_masks[i].end());
+                else t_mask.insert(t_mask.end(), per_doc[i].size(), 1u);
             }
-            CHECK(test_rr->token_flow == t_flow && test_rr->doc_ids == t_ids
-                      && test_rr->loss_mask == t_mask,
+            CHECK(test_rr->token_flow == t_flow && test_rr->doc_ids == t_ids &&
+                      test_rr->loss_mask == t_mask,
                   (tag + ": test 子集逐位一致").c_str());
         }
     }
@@ -257,10 +248,9 @@ int main()
     }
 
     std::error_code ec;
-    for (const char *p : {"dataset_integration_corpus.txt",
-                          "dataset_integration_all.nndataset",
-                          "dataset_integration_assistant.nndataset",
-                          "dataset_integration_vocab.nnvocab"})
+    for (const char* p :
+         {"dataset_integration_corpus.txt", "dataset_integration_all.nndataset",
+          "dataset_integration_assistant.nndataset", "dataset_integration_vocab.nnvocab"})
         std::filesystem::remove(p, ec);
 
     std::printf("\ndataset_integration_test: %d failure(s)\n", g_fail);

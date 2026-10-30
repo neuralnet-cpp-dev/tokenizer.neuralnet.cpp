@@ -43,29 +43,27 @@ namespace nn
 class BPETokenizer : public Tokenizer
 {
 public:
-    static constexpr std::size_t BYTE_BASE       = 256;
-    static constexpr std::size_t BOS_ID          = BYTE_BASE;       // 256
-    static constexpr std::size_t EOS_ID          = BYTE_BASE + 1;   // 257
+    static constexpr std::size_t BYTE_BASE = 256;
+    static constexpr std::size_t BOS_ID = BYTE_BASE;       // 256
+    static constexpr std::size_t EOS_ID = BYTE_BASE + 1;   // 257
     static constexpr std::size_t DEFAULT_VOCAB_SIZE = 5000;
-    static constexpr std::size_t DEFAULT_MIN_FREQ   = 2;
+    static constexpr std::size_t DEFAULT_MIN_FREQ = 2;
 
     using LogFn = std::function<void(std::string_view)>;
 
     struct Config
     {
-        std::size_t   vocab_size = DEFAULT_VOCAB_SIZE;
-        std::uint32_t min_freq   = DEFAULT_MIN_FREQ;
-        LogFn         log        = nullptr;
-        bool          show_progress = false;   // 训练时显示控制台进度条
-        std::uint32_t threads    = 0;   // 预分词并行: 0=自动(线程池全部核心), 1=顺序, >1=指定并行度
+        std::size_t vocab_size = DEFAULT_VOCAB_SIZE;
+        std::uint32_t min_freq = DEFAULT_MIN_FREQ;
+        LogFn log = nullptr;
+        bool show_progress = false;   // 训练时显示控制台进度条
+        std::uint32_t threads = 0;   // 预分词并行: 0=自动(线程池全部核心), 1=顺序, >1=指定并行度
     };
 
-    static const std::regex &pre_pattern()
+    static const std::regex& pre_pattern()
     {
-        static const std::regex pat(
-            R"('s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+|[^\s\w]+|\s+)",
-            std::regex::optimize
-        );
+        static const std::regex pat(R"('s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+|[^\s\w]+|\s+)",
+                                    std::regex::optimize);
         return pat;
     }
 
@@ -74,19 +72,18 @@ public:
     [[nodiscard]] std::size_t bos_id() const noexcept override { return BOS_ID; }
     [[nodiscard]] std::size_t eos_id() const noexcept override { return EOS_ID; }
 
-    Result<void> train(const std::string &text) { return train(text, Config{}); }
+    Result<void> train(const std::string& text) { return train(text, Config{}); }
 
-    Result<void> train(const std::string &text, const Config &config)
+    Result<void> train(const std::string& text, const Config& config)
     {
         // 库 API 守卫（与 CLI 的 >=258 校验对齐）：vocab_size < BYTE_BASE+2 时，
         // 下方 merges_.reserve(config.vocab_size - BYTE_BASE - 2) 会发生无符号
         // 下溢 → ~SIZE_MAX 分配 → bad_alloc/terminate（-fno-exceptions 下不回 Result）。
         if (config.vocab_size < BYTE_BASE + 2)
-            NN_FAIL("BPETokenizer::train: vocab_size 必须 >= " +                 std::to_string(BYTE_BASE + 2) + "（256 字节 token + BOS/EOS）");
+            NN_FAIL("BPETokenizer::train: vocab_size 必须 >= " + std::to_string(BYTE_BASE + 2) +
+                    "（256 字节 token + BOS/EOS）");
 
-        auto log = config.log
-            ? config.log
-            : LogFn{[](std::string_view) { /* 静默 */ }};
+        auto log = config.log ? config.log : LogFn{[](std::string_view) { /* 静默 */ }};
 
         log("\n[BPE 训练] 预分词...");
         const bool show_p = config.show_progress;
@@ -99,8 +96,8 @@ public:
         {
             const std::string s(text);
             auto worker = [&](std::size_t b, std::size_t e,
-                              std::unordered_map<std::string, std::size_t> &local,
-                              const std::function<void(std::size_t)> &progress)
+                              std::unordered_map<std::string, std::size_t>& local,
+                              const std::function<void(std::size_t)>& progress)
             {
                 const std::string seg(s.data() + b, e - b);
                 // 用保护标记的 pre_tokenize：保留特殊 token 作为独立 chunk，
@@ -108,13 +105,13 @@ public:
                 auto chunks = pre_tokenize(seg);
                 std::size_t last_mb = static_cast<std::size_t>(-1);
                 std::size_t off = 0;
-                for (const auto &ch : chunks)
+                for (const auto& ch : chunks)
                 {
                     ++local[ch];
                     off += ch.size();
                     // 绝对偏移 = 段起点 + 段内偏移
                     const auto pos = b + off;
-                    const auto mb  = pos / (1u << 20);
+                    const auto mb = pos / (1u << 20);
                     if (mb != last_mb)
                     {
                         last_mb = mb;
@@ -133,7 +130,7 @@ public:
         std::size_t enc_i = 0;
         std::size_t last_pct = static_cast<std::size_t>(-1);
         const std::size_t wf_size = word_freq.size();
-        for (auto &[w, cnt] : word_freq)
+        for (auto& [w, cnt] : word_freq)
         {
             std::vector<std::size_t> ids;
             ids.reserve(w.size());
@@ -153,8 +150,7 @@ public:
             }
         }
         word_freq.clear();
-        if (show_p)
-            finish_progress_("预分词");
+        if (show_p) finish_progress_("预分词");
         log("  总字节数: " + std::to_string(total_bytes));
 
         vocab_.clear();
@@ -182,19 +178,17 @@ public:
         return {};
     }
 
-    [[nodiscard]] std::vector<std::size_t> encode(const std::string &text) const override
+    [[nodiscard]] std::vector<std::size_t> encode(const std::string& text) const override
     {
         // 保序并行：按安全切分点分段 → 段内顺序编码 → 按段序拼接
         // （结果为单线程逐字节一致；见基类 encode_segments_）。
-        return encode_segments_(text, [this](std::string_view seg, std::vector<std::size_t> &out)
-        {
-            encode_segment_(seg, out);
-        });
+        return encode_segments_(text, [this](std::string_view seg, std::vector<std::size_t>& out)
+                                { encode_segment_(seg, out); });
     }
 
 private:
     // ── 顺序编码一段文本：把 ids **追加**到 all_ids ──────────────────
-    void encode_segment_(std::string_view text, std::vector<std::size_t> &all_ids) const
+    void encode_segment_(std::string_view text, std::vector<std::size_t>& all_ids) const
     {
         std::size_t pos = 0;
         while (pos < text.size())
@@ -204,22 +198,29 @@ private:
             {
                 auto [mid, mlen] = try_match_marker(text, pos);
                 if (mid != Tokenizer::npos)
-                { all_ids.push_back(mid); pos += mlen; continue; }
+                {
+                    all_ids.push_back(mid);
+                    pos += mlen;
+                    continue;
+                }
             }
             // 收集普通文本直到下一个标记
             auto seg_start = pos;
             while (pos < text.size())
             {
                 if (has_dialogue_markers())
-                { auto [mid, mlen] = try_match_marker(text, pos); if (mid != Tokenizer::npos) break; }
+                {
+                    auto [mid, mlen] = try_match_marker(text, pos);
+                    if (mid != Tokenizer::npos) break;
+                }
                 ++pos;
             }
             std::string segment(text.substr(seg_start, pos - seg_start));
             // 正常 BPE 编码
             auto chunks = pre_tokenize(segment);
             // 每 chunk 复用 thread_local 输入缓冲 → 合并全程零堆分配
-            auto &ids = bpe_merge_scratch_().ids;
-            for (const auto &chunk : chunks)
+            auto& ids = bpe_merge_scratch_().ids;
+            for (const auto& chunk : chunks)
             {
                 ids.clear();
                 ids.reserve(chunk.size());
@@ -233,7 +234,6 @@ private:
     }
 
 public:
-
     [[nodiscard]] std::string decode(std::span<const std::size_t> ids) const override
     {
         std::string result;
@@ -241,14 +241,46 @@ public:
         for (auto id : ids)
         {
             // 对话标记 → 原始文本
-            if (id == markers_.system)        { result += "<|system|>";          continue; }
-            if (id == markers_.system_end)    { result += "<|end_of_system|>";   continue; }
-            if (id == markers_.user)          { result += "<|user|>";            continue; }
-            if (id == markers_.user_end)      { result += "<|end_of_user|>";     continue; }
-            if (id == markers_.assistant)     { result += "<|assistant|>";       continue; }
-            if (id == markers_.assistant_end) { result += "<|end_of_assistant|>";continue; }
-            if (id == markers_.start_think)   { result += "<think>";                continue; }
-            if (id == markers_.end_think)     { result += "</think>";              continue; }
+            if (id == markers_.system)
+            {
+                result += "<|system|>";
+                continue;
+            }
+            if (id == markers_.system_end)
+            {
+                result += "<|end_of_system|>";
+                continue;
+            }
+            if (id == markers_.user)
+            {
+                result += "<|user|>";
+                continue;
+            }
+            if (id == markers_.user_end)
+            {
+                result += "<|end_of_user|>";
+                continue;
+            }
+            if (id == markers_.assistant)
+            {
+                result += "<|assistant|>";
+                continue;
+            }
+            if (id == markers_.assistant_end)
+            {
+                result += "<|end_of_assistant|>";
+                continue;
+            }
+            if (id == markers_.start_think)
+            {
+                result += "<think>";
+                continue;
+            }
+            if (id == markers_.end_think)
+            {
+                result += "</think>";
+                continue;
+            }
             result += id < vocab_.size() ? vocab_[id] : std::string{REPLACEMENT_CHAR};
         }
         return result;
@@ -263,7 +295,7 @@ protected:
 
 public:
     // ── 旧 JSON 词表读取（模型 v5 内嵌词表 / dataset_convert vocab 用）──
-    [[nodiscard]] Result<void> load_from_string(const std::string &content) override
+    [[nodiscard]] Result<void> load_from_string(const std::string& content) override
     {
         vocab_.clear();
         merges_.clear();
@@ -280,25 +312,34 @@ public:
                 std::size_t pos = mb + 1;
                 while (pos < content.size())
                 {
-                    while (pos < content.size() && (content[pos]==' '||content[pos]=='\n'||
-                           content[pos]=='\r'||content[pos]=='\t'||content[pos]==',')) ++pos;
+                    while (pos < content.size() &&
+                           (content[pos] == ' ' || content[pos] == '\n' || content[pos] == '\r' ||
+                            content[pos] == '\t' || content[pos] == ','))
+                        ++pos;
                     if (pos >= content.size() || content[pos] == ']') break;
-                    if (content[pos] != '[') { ++pos; continue; }
+                    if (content[pos] != '[')
+                    {
+                        ++pos;
+                        continue;
+                    }
                     ++pos;
                     std::size_t nums[3]{};
                     for (int n = 0; n < 3; ++n)
                     {
-                        while (pos < content.size() && (content[pos]==' '||content[pos]=='\n'||
-                               content[pos]=='\r'||content[pos]=='\t'||content[pos]==',')) ++pos;
+                        while (pos < content.size() &&
+                               (content[pos] == ' ' || content[pos] == '\n' ||
+                                content[pos] == '\r' || content[pos] == '\t' ||
+                                content[pos] == ','))
+                            ++pos;
                         std::size_t digit_start = pos;
                         while (pos < content.size() && content[pos] >= '0' && content[pos] <= '9')
                             ++pos;
                         if (pos > digit_start)
-                            std::from_chars(content.data() + digit_start,
-                                            content.data() + pos,
+                            std::from_chars(content.data() + digit_start, content.data() + pos,
                                             nums[n]);
                     }
-                    while (pos < content.size() && content[pos] != ']') ++pos;
+                    while (pos < content.size() && content[pos] != ']')
+                        ++pos;
                     if (pos < content.size()) ++pos;
                     merges_.push_back({nums[0], nums[1], nums[2]});
                 }
@@ -311,21 +352,22 @@ public:
     }
 
     [[nodiscard]] std::size_t vocab_size() const noexcept override { return vocab_.size(); }
-    [[nodiscard]] const std::vector<std::string> &vocab() const noexcept override { return vocab_; }
+    [[nodiscard]] const std::vector<std::string>& vocab() const noexcept override { return vocab_; }
     [[nodiscard]] std::size_t merge_count() const noexcept { return merges_.size(); }
 
     [[nodiscard]] static std::vector<std::string> pre_tokenize(std::string_view text)
     {
         // 保留特殊标记（按长度降序，最长匹配优先，如 <|tool_result|> 优先于 <|tool|>）
-        static const std::vector<std::string> markers = [] {
+        static const std::vector<std::string> markers = []
+        {
             std::vector<std::string> m = {
-                "<|system|>", "<|end_of_system|>", "<|user|>", "<|end_of_user|>",
-                "<|assistant|>", "<|end_of_assistant|>", "<|end_of_turn|>", "<|sep|>",
-                "<|tool|>", "<|tool_result|>", "<|image|>", "<|audio|>",
-                "<|video|>", "<|file|>"
-            };
+                "<|system|>",      "<|end_of_system|>", "<|user|>",
+                "<|end_of_user|>", "<|assistant|>",     "<|end_of_assistant|>",
+                "<|end_of_turn|>", "<|sep|>",           "<|tool|>",
+                "<|tool_result|>", "<|image|>",         "<|audio|>",
+                "<|video|>",       "<|file|>"};
             std::sort(m.begin(), m.end(),
-                      [](const auto &a, const auto &b) { return a.size() > b.size(); });
+                      [](const auto& a, const auto& b) { return a.size() > b.size(); });
             return m;
         }();
 
@@ -335,9 +377,11 @@ public:
         std::vector<std::string> chunks;
         chunks.reserve(text.size() / 4);
         std::string plain;  // 累积标记之间的普通文本
-        auto flush_plain = [&]() {
+        auto flush_plain = [&]()
+        {
             if (plain.empty()) return;
-            std::string s = std::move(plain); plain.clear();
+            std::string s = std::move(plain);
+            plain.clear();
             // 手写状态机替代 std::sregex_iterator（预分词热路径），语义与
             // pre_pattern() 完全一致（左最先优先，byte 级）；正确性由
             // src/tokenizer_consistency_test.cpp 对拍 std::regex 仲裁。
@@ -345,7 +389,11 @@ public:
             while (p < s.size())
             {
                 const std::size_t len = pre_match_len(s, p);
-                if (len == 0) { ++p; continue; }   // 无匹配字符（如 '_'）跳过，与 sregex_iterator 一致
+                if (len == 0)
+                {
+                    ++p;
+                    continue;
+                }   // 无匹配字符（如 '_'）跳过，与 sregex_iterator 一致
                 chunks.push_back(s.substr(p, len));
                 p += len;
             }
@@ -359,9 +407,12 @@ public:
             // 避免对每个普通字符做 14 次比较 + substr 分配；compare 免中间字符串。
             if (text[pos] == '<')
             {
-                for (const auto &mk : markers)
+                for (const auto& mk : markers)
                     if (pos + mk.size() <= text.size() && text.compare(pos, mk.size(), mk) == 0)
-                    { mlen = mk.size(); break; }
+                    {
+                        mlen = mk.size();
+                        break;
+                    }
             }
             if (mlen > 0)
             {
@@ -387,23 +438,21 @@ private:
     // 字母则整体失败，落回 \s+）；③ 非 ASCII 字节视作 [^\s\w] 标点运行。
     static std::size_t pre_match_len(std::string_view text, std::size_t pos) noexcept
     {
-        static constexpr std::string_view contractions[] = {
-            "'s", "'t", "'re", "'ve", "'m", "'ll", "'d"
-        };
+        static constexpr std::string_view contractions[] = {"'s", "'t",  "'re", "'ve",
+                                                            "'m", "'ll", "'d"};
         const char c = text[pos];
         if (c == '\'')
-            for (const auto &a : contractions)
+            for (const auto& a : contractions)
                 if (pos + a.size() <= text.size() && text.compare(pos, a.size(), a) == 0)
                     return a.size();
 
-        const auto is_letter = [](char ch) noexcept {
-            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
-        };
+        const auto is_letter = [](char ch) noexcept
+        { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'); };
         const auto is_digit = [](char ch) noexcept { return ch >= '0' && ch <= '9'; };
-        const auto is_ws = [](char ch) noexcept {
-            return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
-        };
-        const auto is_word = [&](char ch) noexcept { return is_letter(ch) || is_digit(ch) || ch == '_'; };
+        const auto is_ws = [](char ch) noexcept
+        { return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v'; };
+        const auto is_word = [&](char ch) noexcept
+        { return is_letter(ch) || is_digit(ch) || ch == '_'; };
 
         // ' ?[a-zA-Z]+'
         if (c == ' ')
@@ -411,14 +460,16 @@ private:
             if (pos + 1 < text.size() && is_letter(text[pos + 1]))
             {
                 std::size_t e = pos + 2;
-                while (e < text.size() && is_letter(text[e])) ++e;
+                while (e < text.size() && is_letter(text[e]))
+                    ++e;
                 return e - pos;
             }
         }
         else if (is_letter(c))
         {
             std::size_t e = pos + 1;
-            while (e < text.size() && is_letter(text[e])) ++e;
+            while (e < text.size() && is_letter(text[e]))
+                ++e;
             return e - pos;
         }
         // ' ?[0-9]+'
@@ -427,28 +478,32 @@ private:
             if (pos + 1 < text.size() && is_digit(text[pos + 1]))
             {
                 std::size_t e = pos + 2;
-                while (e < text.size() && is_digit(text[e])) ++e;
+                while (e < text.size() && is_digit(text[e]))
+                    ++e;
                 return e - pos;
             }
         }
         else if (is_digit(c))
         {
             std::size_t e = pos + 1;
-            while (e < text.size() && is_digit(text[e])) ++e;
+            while (e < text.size() && is_digit(text[e]))
+                ++e;
             return e - pos;
         }
         // '[^\s\w]+'
         if (!is_ws(c) && !is_word(c))
         {
             std::size_t e = pos + 1;
-            while (e < text.size() && !is_ws(text[e]) && !is_word(text[e])) ++e;
+            while (e < text.size() && !is_ws(text[e]) && !is_word(text[e]))
+                ++e;
             return e - pos;
         }
         // '\s+'
         if (is_ws(c))
         {
             std::size_t e = pos + 1;
-            while (e < text.size() && is_ws(text[e])) ++e;
+            while (e < text.size() && is_ws(text[e]))
+                ++e;
             return e - pos;
         }
         // 无匹配：返回 0 表示该字符被跳过（如 '_' 是 \w 但非字母/数字，不属于
@@ -461,4 +516,3 @@ private:
 
 
 } // namespace nn
-
